@@ -1,8 +1,7 @@
-﻿using System;
+using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using System.Collections.Generic;
 using System.Speech.Synthesis;
 using System.Runtime.InteropServices;
 
@@ -11,6 +10,7 @@ namespace VoiceCalculator
     public interface UIUpdater
     {
         void UpdateUI(string result);
+        void ShowError();
     }
 
     public partial class MainWindow : Window, UIUpdater
@@ -31,9 +31,6 @@ namespace VoiceCalculator
 
             Loaded += (_, _) =>
             {
-                Keyboard.Focus(Number1);
-
-                InitUI();
             };
 
             Closing += (_, _) =>
@@ -51,48 +48,6 @@ namespace VoiceCalculator
 
                 Application.Current.Shutdown();
             }
-
-            LoadGrammar(s_numbers[_sum]);
-        }
-
-        private void InitUI()
-        {
-            Result.Text = NoResult;
-            Instruction.Text = PronounceResult;
-        }
-
-        // 'Delete' and 'Backspace' are disabled, typing new digit will substitute current one. 
-        private void TextBox_PreviewKeyDown(object sender, KeyEventArgs e)
-        {
-            if (e.Key == Key.Delete || e.Key == Key.Back)
-            {
-                e.Handled = true;
-                return;
-            }
-
-            var key = e.Key - Key.D0;
-
-            // Allow only digits 0 - 9.
-            if (0 <= key && key <= 9)
-            {
-                var textBox = sender as TextBox;
-
-                var strKey = key.ToString();
-
-                // If nothing is changed, return.
-                if (textBox.Text == strKey)
-                {
-                    return;
-                }
-
-                textBox.Text = strKey;
-
-                InitUI();
-
-                _sum = int.Parse(Number1.Text) + int.Parse(Number2.Text);
-
-                LoadGrammar(s_numbers[_sum]);
-            }
         }
 
         private void LoadGrammar(string text)
@@ -109,103 +64,70 @@ namespace VoiceCalculator
             }
         }
 
-        private void RestoreCalculator()
-        {
-            if (_sum != -1)
-            {
-                LoadGrammar(s_numbers[_sum]);
-            }
-        }
 
         public void UpdateUI(string result)
         {
-            if (_textUnderCursor == null)
-            {
-                // Use '_sum == -1' to update UI and speak only once.
-                if (_sum != -1 && result == s_numbers[_sum])
-                {
-                    Result.Text = _sum.ToString();
-                    Instruction.Text = CorrectResult;
-
-                    _sum = -1;
-
-                    _speechSynthesizer.SpeakAsync("Correct");
-                }
-            }
-            else
-            {
-                if (result == _textUnderCursor)
-                {
-                    _textUnderCursor = null;
-
-                    RestoreCalculator();
-
-                    Console.WriteLine("Reply from speechSynthesizer: " + result);
-
-                    _speechSynthesizer.SpeakAsync("Correct");
-                }
-            }
+            Info.Text = "Correct! Click on any word and pronounce it";
         }
 
-        private void Window_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+        public void ShowError()
         {
-            var source = e.OriginalSource as DependencyObject;
-            if (source == null)
-            {
-                return;
-            }
-
-            string text = VisualTreeHelpers.GetTextFromElement(source);
-            if (!String.IsNullOrEmpty(text))
-            {
-                _textUnderCursor = text;
-                Console.WriteLine("_textUnderCursor: " + text);
-
-                LoadGrammar(_textUnderCursor);
-
-                _speechSynthesizer.SpeakAsync("Pronounce text under the cursor");
-            }
-        }
-
-        private void Window_PreviewMouseUp(object sender, MouseButtonEventArgs e)
-        {
-            _textUnderCursor = null;
-
-            _speechSynthesizer.SpeakAsyncCancelAll();
-
-            RestoreCalculator();
+            Info.Text = "Incorrect! Try pronounce '" + _word + "' again";
         }
 
         private ISpeechRecognizer _speechRecognizer;
 
-        // Used in voice calculator.
-        private int _sum = 0;
-
-        // Used in recognizing text under the cusror.
-        private string _textUnderCursor;
-
-        private static List<string> s_numbers = new List<string>{
-            "zero",
-            "one",
-            "two",
-            "three",
-            "four",
-            "five",
-            "six",
-            "seven",
-            "eight",
-            "nine",
-            "ten",
-            "eleven",
-            "twelve",
-            "thirteen",
-            "fourteen",
-            "fifteen",
-            "sixteen",
-            "seventeen",
-            "eighteen"
-        };
-
         SpeechSynthesizer _speechSynthesizer = new SpeechSynthesizer();
+
+        private void TextBox_KeyDown(object sender, KeyEventArgs e)
+        {
+            var text = Words.Text;
+
+            if (Words.Text == "Type any text here")
+            {
+                Words.Text = "";
+                Words.Foreground = System.Windows.Media.Brushes.Black;
+            }
+        }
+
+        private void TextBox_MouseDown(object sender, MouseButtonEventArgs e)
+        {
+            TextBox textBox = sender as TextBox;
+            if (textBox != null)
+            {
+                // Get the mouse click position relative to the TextBox
+                Point clickPoint = e.GetPosition(textBox);
+
+                // Get the character index from the click position
+                int charIndex = textBox.GetCharacterIndexFromPoint(clickPoint, true);
+
+                if (charIndex >= 0 && charIndex < textBox.Text.Length)
+                {
+                    string text = textBox.Text;
+
+                    // Find the start and end of the word at the given index
+                    int start = charIndex;
+                    while (start > 0 && !char.IsWhiteSpace(text[start - 1]))
+                    {
+                        start--;
+                    }
+
+                    int end = charIndex;
+                    while (end < text.Length - 1 && !char.IsWhiteSpace(text[end + 1]))
+                    {
+                        end++;
+                    }
+
+                    // Extract the word
+                    _word = text.Substring(start, end - start + 1);
+
+                    Info.Text = "Pronounce '" + _word + "'";
+
+                    LoadGrammar(_word);
+                }
+            }
+        }
+
+        string _word;
     }
 }
