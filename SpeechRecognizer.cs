@@ -1,4 +1,4 @@
-﻿using System.Windows;
+using System.Windows;
 using System.Speech.Recognition;
 
 namespace VoiceCalculator
@@ -34,6 +34,16 @@ namespace VoiceCalculator
             }
         }
 
+        UIUpdater GetMainWindow()
+        {
+            if (Application.Current.MainWindow is UIUpdater uiUpdater)
+            {
+                return uiUpdater;
+            }
+
+            return null;
+        }
+
         // Constructor is private, created via singleton 'Instance'.
         private SpeechRecognizer()
         {
@@ -47,13 +57,24 @@ namespace VoiceCalculator
             {
                 if (e.Result != null)
                 {
-                    if (Application.Current.MainWindow is UIUpdater uiUpdater)
+                    var mainWindow = GetMainWindow();
+                    if (mainWindow != null)
                     {
                         var resultText = e.Result.Text;
 
                         // The thread in the callback is the same as 'MainWindow' thread, can be called without switching thread context.
-                        uiUpdater.UpdateUI(resultText);
+                        mainWindow.UpdateUI(resultText);
                     }
+                }
+            };
+
+            _speechRecognizer.SpeechRecognitionRejected += (object sender, SpeechRecognitionRejectedEventArgs e) =>
+            {
+                var mainWindow = GetMainWindow();
+                if (mainWindow != null)
+                {
+                    // The thread in the callback is the same as 'MainWindow' thread, can be called without switching thread context.
+                    mainWindow.ShowError();
                 }
             };
         }
